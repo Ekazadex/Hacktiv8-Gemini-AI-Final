@@ -1,19 +1,29 @@
 import { GoogleGenAI } from "@google/genai";
 import 'dotenv/config';
 import express from 'express';
+import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import multer from 'multer';
-import fs from 'fs/promises';
 
 const app = express();
-const upload = multer()
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const upload = multer();
 
-const Gemini_Model = "gemini-2.5-flash";
+// Tambahan Setup untuk __dirname di ES Module
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
+app.use(cors());
 app.use(express.json());
 
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const Gemini_Model = "gemini-2.5-flash";
+
+// Tambahan middleware untuk melayani file statis (frontend)
+app.use(express.static(path.join(__dirname, 'public')));
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Gemini_API Server Ready on http://localhost:${PORT}`));
+app.listen(PORT, () => console.log(`Gemini Chatbot Ready on http://localhost:${PORT}`));
 
 function extractText(resp) {
     try {
@@ -94,4 +104,23 @@ app.post('/generate-from-audio', upload.single('audio'), async (req, res) => {
     }   catch (err) {
         res.status(500).json({ error: err.message });
     }   
+});
+
+// API Chat
+app.post('/api/chat', async (req, res) => {
+    try {
+        const { messages } = req.body;
+        if (!Array.isArray(messages)) throw new Error("Messages should be an array");
+        const contents = messages.map(msg => ({
+            role: msg.role === 'user' ? 'user' : msg.role,
+            parts: [{ text: msg.content }]
+        }));
+        const resp = await ai.models.generateContent({
+            model: Gemini_Model,
+            contents
+        });
+        res.json({ result: extractText(resp) });
+    }   catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
